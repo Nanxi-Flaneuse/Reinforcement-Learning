@@ -1,0 +1,55 @@
+1. chatGPT answer on how to draw proportion of optimal action plot
+
+prompt: how to plot a proportion of optimal actions taken by a reinforcement learning agent overtime using python?
+
+Answer: To plot the **proportion of optimal actions taken** by a reinforcement learning (RL) agent over time in Python, follow these steps:
+
+### **Steps**
+1. **Track the optimal actions**: Keep a record of whether the agent selects the optimal action at each timestep.
+2. **Compute the running proportion**: Calculate the cumulative proportion of optimal actions over time.
+3. **Plot the results**: Use `matplotlib` to visualize the trend.
+
+---
+
+### **Example: Plotting Proportion of Optimal Actions Over Time**
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Simulated data: actions taken by the agent (1 = optimal, 0 = suboptimal)
+np.random.seed(42)  # For reproducibility
+timesteps = 1000  # Number of episodes
+optimal_actions = np.random.choice([0, 1], size=timesteps, p=[0.3, 0.7])  # 70% optimal actions
+
+# Compute the running proportion of optimal actions
+cumulative_optimal = np.cumsum(optimal_actions)
+proportion_optimal = cumulative_optimal / np.arange(1, timesteps + 1)
+
+# Plot the proportion of optimal actions over time
+plt.figure(figsize=(10, 5))
+plt.plot(proportion_optimal, label="Proportion of Optimal Actions", color='b')
+plt.xlabel("Timesteps")
+plt.ylabel("Proportion of Optimal Actions")
+plt.title("Proportion of Optimal Actions Over Time")
+plt.legend()
+plt.grid()
+plt.show()
+```
+
+---
+
+### **Explanation**
+- **`optimal_actions`**: A list where each entry is `1` if the optimal action was taken and `0` otherwise.
+- **`cumulative_optimal`**: Cumulative sum of optimal actions up to each timestep.
+- **`proportion_optimal`**: Running proportion of optimal actions.
+- **`plt.plot()`**: Plots the proportion over time.
+
+---
+
+### **How to Use in a Real RL Experiment**
+In an RL experiment:
+- Track the **true optimal action** for each state using a **Q-table** or a **policy**.
+- Compare the agent's selected action with the optimal action at each timestep.
+- Use the above plotting method to analyze performance trends.
+
+Would you like an example with real RL training data (e.g., from Q-learning or Deep Q-Networks)?
