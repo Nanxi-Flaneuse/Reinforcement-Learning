@@ -1,55 +1,173 @@
 1. chatGPT answer on how to draw proportion of optimal action plot
 
-prompt: how to plot a proportion of optimal actions taken by a reinforcement learning agent overtime using python?
+    prompt: how to plot a proportion of optimal actions taken by a reinforcement learning agent overtime using python?
 
-Answer: To plot the **proportion of optimal actions taken** by a reinforcement learning (RL) agent over time in Python, follow these steps:
+    Answer: To plot the **proportion of optimal actions taken** by a reinforcement learning (RL) agent over time in Python, follow these steps:
 
-### **Steps**
-1. **Track the optimal actions**: Keep a record of whether the agent selects the optimal action at each timestep.
-2. **Compute the running proportion**: Calculate the cumulative proportion of optimal actions over time.
-3. **Plot the results**: Use `matplotlib` to visualize the trend.
+    ### **Steps**
+    1. **Track the optimal actions**: Keep a record of whether the agent selects the optimal action at each timestep.
+    2. **Compute the running proportion**: Calculate the cumulative proportion of optimal actions over time.
+    3. **Plot the results**: Use `matplotlib` to visualize the trend.
 
+    ---
+
+    ### **Example: Plotting Proportion of Optimal Actions Over Time**
+    ```python
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    # Simulated data: actions taken by the agent (1 = optimal, 0 = suboptimal)
+    np.random.seed(42)  # For reproducibility
+    timesteps = 1000  # Number of episodes
+    optimal_actions = np.random.choice([0, 1], size=timesteps, p=[0.3, 0.7])  # 70% optimal actions
+
+    # Compute the running proportion of optimal actions
+    cumulative_optimal = np.cumsum(optimal_actions)
+    proportion_optimal = cumulative_optimal / np.arange(1, timesteps + 1)
+
+    # Plot the proportion of optimal actions over time
+    plt.figure(figsize=(10, 5))
+    plt.plot(proportion_optimal, label="Proportion of Optimal Actions", color='b')
+    plt.xlabel("Timesteps")
+    plt.ylabel("Proportion of Optimal Actions")
+    plt.title("Proportion of Optimal Actions Over Time")
+    plt.legend()
+    plt.grid()
+    plt.show()
+    ```
+
+    ---
+
+    ### **Explanation**
+    - **`optimal_actions`**: A list where each entry is `1` if the optimal action was taken and `0` otherwise.
+    - **`cumulative_optimal`**: Cumulative sum of optimal actions up to each timestep.
+    - **`proportion_optimal`**: Running proportion of optimal actions.
+    - **`plt.plot()`**: Plots the proportion over time.
+
+    ---
+
+    ### **How to Use in a Real RL Experiment**
+    In an RL experiment:
+    - Track the **true optimal action** for each state using a **Q-table** or a **policy**.
+    - Compare the agent's selected action with the optimal action at each timestep.
+    - Use the above plotting method to analyze performance trends.
+
+    Would you like an example with real RL training data (e.g., from Q-learning or Deep Q-Networks)?
+
+2. Debugging using chatGPT
+    prompt: chatGPT was first given a description of the problem from the book. Then given the following question followed by a copy of my code:
+        "Here is my Python solution to the problem. For some reason, the reward graph I got is just different from yours and the plot doesn't seem 
+        to be converging. Can you take a look at what the error might be? can you explain why my code is not producing the correct result and how you corrected the mistakes?"
+
+    Answer: 
+
+        Yes! Your code had a few key issues that were likely causing incorrect results. Below, I explain the mistakes and how I corrected them.
 ---
 
-### **Example: Plotting Proportion of Optimal Actions Over Time**
-```python
-import numpy as np
-import matplotlib.pyplot as plt
+        ## **1. Incorrect Calculation of the Optimal Action Over Time**
+        ### **Mistake:**
+        - In your original code, you checked the **current optimal action** (`curr_optimal = np.argmax(self.values)`) **before** selecting an action.
+        - However, `self.values` represents **estimated values** rather than the true action values (`q*(a)`). Since the environment is nonstationary, these estimates can be inaccurate.
+        - Additionally, the check for whether an action was optimal (`if act_ind == curr_optimal`) was not capturing the true optimal action from the environment.
 
-# Simulated data: actions taken by the agent (1 = optimal, 0 = suboptimal)
-np.random.seed(42)  # For reproducibility
-timesteps = 1000  # Number of episodes
-optimal_actions = np.random.choice([0, 1], size=timesteps, p=[0.3, 0.7])  # 70% optimal actions
+        ### **Correction:**
+        - I introduced a method to **get the true optimal action** from the underlying bandit at each time step:
+        ```python
+        optimal_action = bandit.optimal_action()
+        ```
+        - Then, I correctly checked if the selected action matched the true optimal action:
+        ```python
+        optimal_actions_sample_avg.append(1 if action_sa == optimal_action else 0)
+        optimal_actions_constant_alpha.append(1 if action_ca == optimal_action else 0)
+        ```
+        - This ensures that we correctly track the **proportion of optimal actions over time**.
 
-# Compute the running proportion of optimal actions
-cumulative_optimal = np.cumsum(optimal_actions)
-proportion_optimal = cumulative_optimal / np.arange(1, timesteps + 1)
+        ---
 
-# Plot the proportion of optimal actions over time
-plt.figure(figsize=(10, 5))
-plt.plot(proportion_optimal, label="Proportion of Optimal Actions", color='b')
-plt.xlabel("Timesteps")
-plt.ylabel("Proportion of Optimal Actions")
-plt.title("Proportion of Optimal Actions Over Time")
-plt.legend()
-plt.grid()
-plt.show()
-```
+        ## **2. Incorrect Handling of the Random Walk (Nonstationary Updates)**
+        ### **Mistake:**
+        - You were incorrectly **updating self.values** with random noise:
+        ```python
+        self.values += np.random.normal(0, 0.01, self.arm)
+        ```
+        - `self.values` is the agent’s estimate of action values, **not the true environment rewards**.
+        - The correct place to apply random walk noise is in the **true action values** (`q*(a)`), **not the learned values**.
 
----
+        ### **Correction:**
+        - I moved the random walk update to modify the **true** action values inside the environment:
+        ```python
+        self.q_true += np.random.normal(0, self.drift_std_dev, self.k)
+        ```
+        - This ensures that the **environment** is changing over time, rather than corrupting the agent’s learned estimates.
 
-### **Explanation**
-- **`optimal_actions`**: A list where each entry is `1` if the optimal action was taken and `0` otherwise.
-- **`cumulative_optimal`**: Cumulative sum of optimal actions up to each timestep.
-- **`proportion_optimal`**: Running proportion of optimal actions.
-- **`plt.plot()`**: Plots the proportion over time.
+        ---
 
----
+        ## **3. Incorrect Action Selection Strategy**
+        ### **Mistake:**
+        - Your action selection strategy used `random.choices` with **incorrect probability weights**:
+        ```python
+        action = random.choices([0,1], weights = (self.ep, 1-self.ep), k = 1)[0]
+        ```
+        - This method doesn’t work well for selecting an action in an **epsilon-greedy policy**. Instead, we should directly sample a random action or pick the best one.
 
-### **How to Use in a Real RL Experiment**
-In an RL experiment:
-- Track the **true optimal action** for each state using a **Q-table** or a **policy**.
-- Compare the agent's selected action with the optimal action at each timestep.
-- Use the above plotting method to analyze performance trends.
+        ### **Correction:**
+        - I replaced it with proper **epsilon-greedy selection**:
+        ```python
+        def select_action(self):
+            if np.random.rand() < self.epsilon:
+                return np.random.choice(self.k)  # Explore
+            return np.argmax(self.q_est)  # Exploit
+        ```
+        - This ensures correct behavior between **exploration** (random actions) and **exploitation** (choosing the best-known action).
 
-Would you like an example with real RL training data (e.g., from Q-learning or Deep Q-Networks)?
+        ---
+
+        ## **4. Issues with Reward Tracking**
+        ### **Mistake:**
+        - You were tracking rewards but not averaging them properly across multiple runs.
+
+        ### **Correction:**
+        - Instead of storing separate lists for each experiment, I directly accumulated results and computed averages:
+        ```python
+        average_rewards_sample_avg += np.array(rewards_sample_avg)
+        average_rewards_constant_alpha += np.array(rewards_constant_alpha)
+        ```
+        - This ensures proper averaging when results are plotted.
+
+        ---
+
+        ## **5. Missing Plots for Optimal Actions**
+        ### **Mistake:**
+        - You originally had commented-out sections for plotting optimal action proportions.
+
+        ### **Correction:**
+        - I added proper tracking and **a second plot** for optimal action percentage:
+        ```python
+        plt.subplot(1, 2, 2)
+        plt.plot(timesteps, average_optimal_actions_sample_avg, label='Sample-Average')
+        plt.plot(timesteps, average_optimal_actions_constant_alpha, label='Constant Step-Size (α=0.1)')
+        plt.xlabel("Time Steps")
+        plt.ylabel("% Optimal Action")
+        plt.title("Proportion of Optimal Actions Over Time")
+        plt.legend()
+        ```
+        - This ensures we correctly visualize **which method converges better** in terms of picking the optimal action.
+
+        ---
+
+        ### **Final Fixes:**
+        ✔ Corrected optimal action tracking.  
+        ✔ Fixed random walk updates (applied to the true rewards, not the learned estimates).  
+        ✔ Used proper **epsilon-greedy** action selection.  
+        ✔ Improved reward averaging across multiple experiments.  
+        ✔ Added a **separate plot for optimal actions** to analyze agent performance correctly.  
+
+        ---
+
+        ### **Expected Improvements:**
+        After these corrections, your plots should:
+        ✅ Show **convergence** of rewards over time.  
+        ✅ Display a **clear difference** between sample-average and step-size methods.  
+        ✅ Accurately represent the **proportion of optimal actions**.  
+
+        Would you like any further clarifications? 🚀
