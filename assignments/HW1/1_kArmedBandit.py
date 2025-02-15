@@ -12,9 +12,8 @@ import random
 '''tasks
 1. for each type, try with 1 set of parameters. Each set of parameters should have 100 experiments
 2. the averages for the 2 types should be in the same graph, so are the optimal actions
-3. experiment with 3 different arm width for both the step and averages, do a similar plotting like number 2.
+3. experiment with 3 different arm (10, 50, 100) width for both the step and averages, do a similar plotting like number 2.
 '''
-
 # set up a step-size QA agent class
 class k_armed_non_stationary():
     def __init__(self, arm_num, epsilon, seed, epoch, step, method = 'step') -> None:
@@ -24,7 +23,6 @@ class k_armed_non_stationary():
         self.method = method
         self.frequency = [1] * self.arm
         self.rewards = list(np.random.normal(1, 0.01, arm_num)) # generating random reward for the arms
-        self.optimal = self.rewards.index(max(self.rewards))
         self.values = [0] * self.arm # tracking the reward exploration for the arms
         self.epoch = epoch # the number of epochs for training
         self.step = step # the step-size parameter used in updating the value function
@@ -43,23 +41,27 @@ class k_armed_non_stationary():
     def train(self):
         for _ in range(self.epoch):
             # select action
-            action = random.choices([0,1],weights = (self.ep, 1-self.ep), k = 1)[0]
+            # action = random.choices([0,1],weights = (self.ep, 1-self.ep), k = 1)[0]
             # check the current optimal action for recording purpose
-            curr_optimal = self.values.index(max(self.values))
+            curr_optimal = np.argmax(self.rewards)
 
             # take the actual action
-            if action == 0:
+            if np.random.rand() < self.ep:
+            # if action == 0:
                 # randomly choose an action
-                act_ind = random.randint(0,self.arm - 1)
+                act_ind = np.random.choice(self.arm)
             else:
-                act_ind = self.values.index(max(self.values))
+                act_ind = np.argmax(self.values)
             # perform action and update value function
             reward = self.rewards[act_ind]
             if self.method == 'step':
-                self.values[act_ind] += self.step * (reward - self.values[act_ind]) + np.random.normal(0, 0.01, 1)[0]
+                self.values[act_ind] += self.step * (reward - self.values[act_ind]) #+ np.random.normal(0, 0.01, 1)[0]
             else:
-                self.values[act_ind] += 1/self.frequency[act_ind] * (reward - self.values[act_ind]) + np.random.normal(0, 0.01, 1)[0]
+                self.values[act_ind] += (reward - self.values[act_ind])/self.frequency[act_ind] #+ np.random.normal(0, 0.01, 1)[0]
                 self.frequency[act_ind] += 1 # updates the frequency
+            ### CHATGPT consultation on how to take random walk ############
+            self.rewards += np.random.normal(0, 0.01, self.arm)
+            ###############################################################
             # record reward
             self.reward_overtime.append(reward)
             # record action
@@ -112,36 +114,54 @@ class k_armed_non_stationary():
         #################reference to chatGPT instructions end ###############
 
 class experiments():
-    def __init__(self, seeds, epsilon = 0.1, epochs = 10000, arm = 10, method = 'step') -> None:
+    def __init__(self, seeds, epsilon = 0.1, epochs = 10000, arm = 10) -> None:
         self.seeds = seeds
-        self.method = method # select the type of value function. Same as in the other class.
+        # self.method = method # select the type of value function. Same as in the other class.
         self.epochs = epochs
         self.ep = epsilon
         self.arm = arm
-        self.reward = []
-        self.optimal = []
+        self.reward_step = []
+        self.optimal_step = []
+        self.reward_average = []
+        self.optimal_average = []
 
     def get_results(self):
         for seed in self.seeds:
-            arm = k_armed_non_stationary(self.arm, self.ep, seed, self.epochs, 0.1, self.method)
-            arm.train()
-            self.reward.append(arm.get_reward())
-            self.optimal.append(arm.get_optimal())
+            # set up the two methods
+            # arm_num, epsilon, seed, epoch, step, method = 'step'
+            arm_step = k_armed_non_stationary(self.arm, self.ep, seed, self.epochs, 0.1, 'step')
+            arm_average = k_armed_non_stationary(self.arm, self.ep, seed, self.epochs, 0.1, 'average')
+
+            # train and record the outputs
+            arm_step.train()
+            self.reward_step.append(arm_step.get_reward())
+            self.optimal_step.append(arm_step.get_optimal())
+
+            arm_average.train()
+            self.reward_average.append(arm_average.get_reward())
+            self.optimal_average.append(arm_average.get_optimal())
 
     def plot(self, window_size = 100):
         # first calculate the averages of each
         # then plot
-        average_rewards = np.mean(self.reward, axis=0)
-        proportion_optimal_actions = np.mean(self.optimal, axis=0)
+        average_rewards_step = np.mean(self.reward_step, axis=0)
+        average_rewards_average = np.mean(self.reward_average, axis=0)
+
+        proportion_optimal_actions_step = np.mean(self.optimal_step, axis=0)
+        # print(proportion_optimal_actions_step[:150])
+        proportion_optimal_actions_average = np.mean(self.optimal_average, axis=0)
+        # print(proportion_optimal_actions_average[:150])
         # Plotting Results
         plt.figure(figsize=(12, 5))
 
         # Plot Average Reward
         plt.subplot(1, 2, 1)
-        running_avg = np.convolve(average_rewards, np.ones(window_size)/window_size, mode='valid')
+        running_avg_step = np.convolve(average_rewards_step, np.ones(window_size)/window_size, mode='valid')
+        running_avg_average = np.convolve(average_rewards_average, np.ones(window_size)/window_size, mode='valid')
 
         # Plot the running average
-        plt.plot(running_avg, label="Average Reward", color='b')
+        plt.plot(running_avg_step, label="Reward for step method", color='b')
+        plt.plot(running_avg_average, label="Reward for moving averages", color='r')
         plt.xlabel("Episode")
         plt.ylabel(f"Average Reward (over {window_size} steps)")
         plt.title("Running Average Reward")
@@ -159,7 +179,14 @@ class experiments():
 
         # Plot the proportion of optimal actions over time
         # plt.figure(figsize=(10, 5))
-        plt.plot(proportion_optimal_actions, label="Proportion of Optimal Actions", color='g')
+        step = np.convolve(proportion_optimal_actions_step, np.ones(window_size)/window_size, mode='valid')
+        average = np.convolve(proportion_optimal_actions_average, np.ones(window_size)/window_size, mode='valid')
+        plt.plot(step, label="Proportion of Optimal Actions for Step method", color='b')
+        plt.plot(average, label="Proportion of Optimal Actions for average method", color='r')
+
+        # plt.plot(proportion_optimal_actions_step, label="Proportion of Optimal Actions for Step method", color='b')
+        # plt.plot(proportion_optimal_actions_average, label="Proportion of Optimal Actions for average method", color='r')
+
         plt.xlabel("Timesteps")
         plt.ylabel("Proportion of Optimal Actions")
         plt.title("Proportion of Optimal Actions Over Time")
@@ -170,10 +197,11 @@ class experiments():
         # Show the plots
         plt.tight_layout()
         # plt.show()
-        if self.method == 'step':
-            file = 'assignments/plots/step_'+str(self.ep)+'_'+str(self.epochs)+'_'+str(self.arm)+'_'+self.method+'.png'
-        else:
-            file = 'assignments/plots/average_'+str(self.ep)+'_'+str(self.epochs)+'_'+str(self.arm)+'_'+self.method+'.png'
+        # if self.method == 'step':
+        #     file = 'assignments/plots/step_'+str(self.ep)+'_'+str(self.epochs)+'_'+str(self.arm)+'_'+self.method+'.png'
+        # else:
+            # file = 'assignments/plots/average_'+str(self.ep)+'_'+str(self.epochs)+'_'+str(self.arm)+'_'+self.method+'.png'
+        file = 'plots/average_'+str(self.ep)+'_'+str(self.epochs)+'_'+str(self.arm)+'.png'
         plt.savefig(file)
 
 
@@ -186,20 +214,13 @@ if __name__ == '__main__':
     # arm.draw_action()
 
     # 108 seeds
-    seeds = [
-    1,2,3,4,5,6,7,8,9,
-    11,22,33,44,55,66,77,88,99,
-    112,223,334,445,556,667,778,889,999,
-    1152,2253,3354,4455,5556,6657,7758,8859,9959,
-    1212,2223,3234,4245,5256,6267,7278,8289,9299,
-    161,262,363,464,565,666,767,868,969,
-    12127,22237,32347,42457,52567,62677,72787,82897,92997,
-    12182,22283,32384,42485,52586,62687,72788,82889,92989,
-    812182,822283,832384,842485,852586,862687,872788,882889,892989,
-    121820,222830,323840,424850,525860,626870,727880,828890,929890,
-    120182,220283,320384,420485,520586,620687,720788,820889,920989,
-    121802,222803,323804,424805,525806,62607,727808,828809,929809,
-]
+    # seeds = [
+    # 1,2,3,4,5,6,7,8,9,
+    # 11,22,33,44,55,66,77,88,99,
+    # 112,223,334,445,556,667,778,889,999]
+    random.seed(5436)
+    seeds = random.sample(range(1, 10**6), 900)
+    # print(seeds)
 
     # seeds = [1, 10, 21]
 
@@ -212,9 +233,17 @@ if __name__ == '__main__':
     # #     exp.plot()
     ##############################################
 
-    exp = experiments(seeds, 0.1, 10000, 10, 'step')
-    exp.get_results()
-    exp.plot()
+    # exp = experiments(seeds, 0.1, 10000, 10)
+    # exp.get_results()
+    # exp.plot()
+
+    # exp1 = experiments(seeds, 0.1, 10000, 50)
+    # exp1.get_results()
+    # exp1.plot()
+
+    exp2 = experiments(seeds, 0.1, 20000, 100)
+    exp2.get_results()
+    exp2.plot()
 
     # action = random.choices([0,1],weights = (0.1, 0.05), k = 1)
     # print(action)
