@@ -18,8 +18,7 @@ from keras.models import Sequential
 from keras.layers import Dense
 
 '''
-need to incorporate: name of the film, year, reviewer profession?
-need to encode occupation and gender!
+training error
 '''
 
 # # Load JSON data
@@ -37,7 +36,7 @@ need to encode occupation and gender!
 # # Filter verified reviews with non-null overall ratings
 # filtered_df = df[(df['verified'] == True) & (~df['overall'].isnull())]
 # print('hello')
-filtered_df = pd.read_csv('data/ratings_updated_1.csv')
+filtered_df = pd.read_csv('data/training_testing/train.csv')
 
 
 #Create FashionProduct class for a product representation from reviews
@@ -71,7 +70,7 @@ print('user database established')
 # print(len(filtered_df))
 # Group reviews by product ASIN, user_id, and reviewTime
 # filtered_df['reviewTime'] = pd.to_datetime(filtered_df['timestamp'])
-filtered_df.sort_values('timestamp')
+filtered_df = filtered_df.sort_values('timestamp')
 # grouped_df = filtered_df.groupby(['movie_id', 'user_id', 'timestamp'], sort=False)
 # print(grouped_df.head())
 #load spacy for nlp related noun extraction, stopword removal and others
@@ -150,7 +149,7 @@ for state in states_list:
     if state.user_id not in reviewers:
         reviewers[state.user_id] = Reviewer()
         reviewers[state.user_id].movies = set()
-    for prod1 in list(reviewers[state.user_id].movies)[-2:]:
+    for prod1 in list(reviewers[state.user_id].movies)[-4:]:
         state1 = states[(prod1, state.user_id)]
         state.metadata += state1.metadata
 
@@ -167,7 +166,7 @@ class RecommendationEnv(gym.Env):
         self.states_dict = states_dict
         self.iterations = iterations
         self.index = 0
-        state.action = 0
+        self.action = 0
 
 
     def step(self, actions):
@@ -190,9 +189,12 @@ class RecommendationEnv(gym.Env):
             reward = 1
         else:
             self.action = actions[0]
-
-
+    
         self.index += 1
+        if self.index >= len(self.states):
+            done = True
+            return self.state, reward, done, {}
+        
         self.state = self.states[self.index]
         print(f"iteration :{self.index}")
         if (self.iterations == self.index): done = True
@@ -245,7 +247,7 @@ class DQNAgent:
         # to integers.
         encoder = tf.keras.layers.TextVectorization(max_tokens=10000)
         metadatas = [product.metadata for product in self.states]
-        ratings = [product.rating_avg for product in self.states]
+        # ratings = [product.rating_avg for product in self.states]
         encoder.adapt(metadatas)
 
         model = tf.keras.Sequential([
@@ -309,11 +311,11 @@ class DQNAgent:
 
         for i in range(self.batch_size):
             update_input_metadata.append(np.array(mini_batch[i][0].metadata))
-            update_input_ratings.append(np.array(mini_batch[i][0].ratings))
+            update_input_ratings.append(np.array(mini_batch[i][0].rating_avg))
             action.append(mini_batch[i][1])
             reward.append(mini_batch[i][2])
             update_target_metadata.append(np.array(mini_batch[i][3].metadata))
-            update_target_ratings.append(np.array(mini_batch[i][3].ratings))
+            update_target_ratings.append(np.array(mini_batch[i][3].rating_avg))
             done.append(mini_batch[i][4])
 
         target = self.model.predict([np.transpose(update_input_metadata),np.transpose(update_input_ratings)])
@@ -384,6 +386,6 @@ def run():
         if (score > 48): break
 
 if __name__ == '__main__':
-    # run()
-    print(states)
-    print(movies)
+    run()
+    # print(states)
+    # print(movies)

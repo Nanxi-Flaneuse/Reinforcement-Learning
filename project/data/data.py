@@ -1,7 +1,7 @@
 import pandas as pd
 from sklearn.preprocessing import MultiLabelBinarizer
 
-df = pd.read_csv('ratings.csv')
+# df = pd.read_csv('ratings.csv')
 # df['genres'] = df['genres'].str.split('|')
 # mlb = MultiLabelBinarizer()
 # genre_encoded = pd.DataFrame(mlb.fit_transform(df['genres']), columns=mlb.classes_)
@@ -10,6 +10,28 @@ df = pd.read_csv('ratings.csv')
 # genre_cols = mlb.classes_.tolist()
 # df['genre_string'] = df[genre_cols].astype(str).agg(''.join, axis=1)
 
-df[['title', 'year']] = df['title'].str.extract(r'^(.*)\s\((\d{4})\)$')
-# print(df.head())
-df.to_csv('ratings_updated_1.csv', encoding='utf-8')
+# extracting title and year from columm
+# df[['title', 'year']] = df['title'].str.extract(r'^(.*)\s\((\d{4})\)$')
+
+# df.to_csv('ratings_updated_1.csv', encoding='utf-8')
+
+# splitting data into training and testing based on user and timstamp
+
+# Load and sort the dataset
+df = pd.read_csv('ratings_updated_1.csv', index_col=0)
+df = df.sort_values(by=['user_id', 'timestamp'])
+
+# Count the number of interactions per user
+df['interaction_count'] = df.groupby('user_id')['movie_id'].transform('count')
+
+# Rank each row per user (chronological order)
+df['rank'] = df.groupby('user_id').cumcount()
+
+# Compute training mask: keep first 80% for each user
+df['is_train'] = df['rank'] < (0.8 * df['interaction_count'])
+
+# Split without loop
+train_df = df[df['is_train']].drop(columns=['interaction_count', 'rank', 'is_train']).reset_index(drop=True)
+test_df = df[~df['is_train']].drop(columns=['interaction_count', 'rank', 'is_train']).reset_index(drop=True)
+train_df.to_csv('train.csv',encoding='utf-8')
+test_df.to_csv('test.csv',encoding='utf-8')
