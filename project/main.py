@@ -40,8 +40,20 @@ filtered_df = pd.read_csv('data/training_testing/train.csv')
 
 
 #Create FashionProduct class for a product representation from reviews
-class Movie() : pass
-class Reviewer() : pass
+class Movie() : 
+    movie_id : int
+    user_id : int
+    time : int
+    title : str
+    year : int
+    genre : list
+class Reviewer() :
+    user_id: int
+    movies: list
+    profession: str
+    age: int
+    zip: str
+    gender: int
 # Group reviews by reviewers and select users with more than ten purchases
 reviewers = {}
 grouped_df_reviwerId = filtered_df.groupby('user_id')
@@ -53,13 +65,18 @@ for user_id, group in grouped_df_reviwerId:
     age = group['age'].iloc[0] 
     zip = group['zip'].iloc[0] 
     gender = group['gender'].iloc[0] 
+    # print('gender type',type(gender))
     # if len(movies) > 10:
     reviewer = Reviewer()
     reviewer.user_id = user_id
+    # print('user_id type',type(user_id))
     reviewer.movies = movies
     reviewer.profession = profession
     reviewer.age = age
+    reviewer.gender = gender
+    # print('age_type',type(age))
     reviewer.zip = zip
+    # print('zip_type',type(zip))
     reviewers[user_id] = reviewer
 # print(reviewers)
 print('user database established')
@@ -245,37 +262,65 @@ class DQNAgent:
         #Using RNN as it is recommended for text classification
         # Using the TextVectorization layer to normalize, split, and map strings
         # to integers.
-        encoder = tf.keras.layers.TextVectorization(max_tokens=10000)
-        metadatas = [product.metadata for product in self.states]
-        # ratings = [product.rating_avg for product in self.states]
-        encoder.adapt(metadatas)
+        # encoder = tf.keras.layers.TextVectorization(max_tokens=10000)
+        # metadatas = [product.metadata for product in self.states]
+        # # ratings = [product.rating_avg for product in self.states]
+        # encoder.adapt(metadatas)
 
-        model = tf.keras.Sequential([
-            encoder,
-            layers.Embedding(len(encoder.get_vocabulary()), 64, mask_zero=True),
-            layers.Bidirectional(layers.LSTM(64,  return_sequences=True)),
-            layers.Bidirectional(tf.keras.layers.LSTM(32)),
-            layers.Dense(64, activation='relu')
-        ])
-        # Create an input layer for ratings
+        # model = tf.keras.Sequential([
+        #     encoder,
+        #     layers.Embedding(len(encoder.get_vocabulary()), 64, mask_zero=True),
+        #     layers.Bidirectional(layers.LSTM(64,  return_sequences=True)),
+        #     layers.Bidirectional(tf.keras.layers.LSTM(32)),
+        #     layers.Dense(64, activation='relu')
+        # ])
+        # # Create an input layer for ratings
+        # ratings_input = tf.keras.layers.Input(shape=(1,), name='ratings_input')
+
+        # # Concatenate the output of the previous layers with ratings
+        # concatenated = layers.concatenate([model.output, ratings_input])
+
+        # # Add additional layers for your desired architecture
+        # dense_layer = layers.Dense(64, activation='relu')(concatenated)
+        #  # One Q-value per action
+        # output_layer = layers.Dense(len(self.states), activation='linear')(dense_layer)
+
+        # # Create the final model with both metadata and ratings as inputs
+        # model = tf.keras.Model(inputs=[model.input, ratings_input], outputs=output_layer)
+        # # Summary of the model
+        # model.summary()
+
+        # # Compile the model
+        # model.compile(loss='mse',
+        #               optimizer=Adam(learning_rate=self.learning_rate))
+        # return model
+    
+
+        # Inputs
+        text_input = tf.keras.layers.Input(shape=(1,), dtype=tf.string, name='text')
         ratings_input = tf.keras.layers.Input(shape=(1,), name='ratings_input')
 
-        # Concatenate the output of the previous layers with ratings
-        concatenated = layers.concatenate([model.output, ratings_input])
+        # Text encoding and embedding
+        encoder = tf.keras.layers.TextVectorization(max_tokens=10000)
+        metadatas = [product.metadata for product in self.states]
+        encoder.adapt(metadatas)
 
-        # Add additional layers for your desired architecture
+        x = encoder(text_input)
+        x = layers.Embedding(len(encoder.get_vocabulary()), 64, mask_zero=True)(x)
+        x = layers.Bidirectional(layers.LSTM(64, return_sequences=True))(x)
+        x = layers.Bidirectional(layers.LSTM(32))(x)
+        x = layers.Dense(64, activation='relu')(x)
+
+        # Concatenate with ratings input
+        concatenated = layers.concatenate([x, ratings_input])
+
+        # Output layer
         dense_layer = layers.Dense(64, activation='relu')(concatenated)
-         # One Q-value per action
         output_layer = layers.Dense(len(self.states), activation='linear')(dense_layer)
 
-        # Create the final model with both metadata and ratings as inputs
-        model = tf.keras.Model(inputs=[model.input, ratings_input], outputs=output_layer)
-        # Summary of the model
-        model.summary()
-
-        # Compile the model
-        model.compile(loss='mse',
-                      optimizer=Adam(learning_rate=self.learning_rate))
+        # Final model
+        model = tf.keras.Model(inputs=[text_input, ratings_input], outputs=output_layer)
+        model.compile(loss='mse', optimizer=Adam(learning_rate=self.learning_rate))
         return model
 
     # after some time interval update the target model to be same with model
@@ -287,7 +332,12 @@ class DQNAgent:
         if np.random.rand() <= self.epsilon:
             return random.sample(range(self.action_size),10)
         else:
-            q_value = self.model.predict([np.array([state.metadata]), np.array([state.ratings])])
+            # q_value = self.model.predict([[state.metadata], np.array([state.rating_avg])])
+            q_value = self.model.predict(
+                [tf.constant([[state.metadata]]), np.array([[state.rating_avg]],dtype=np.float32)],
+                verbose=0
+            )
+
             return np.argpartition(q_value[0],-10)[-10:]
 
     # save sample <s,a,r,s'> to the replay memory
@@ -318,8 +368,18 @@ class DQNAgent:
             update_target_ratings.append(np.array(mini_batch[i][3].rating_avg))
             done.append(mini_batch[i][4])
 
-        target = self.model.predict([np.transpose(update_input_metadata),np.transpose(update_input_ratings)])
-        target_val = self.target_model.predict([np.transpose(update_target_metadata),np.transpose(update_target_ratings)])
+        # Convert string inputs to a tf.constant of shape (batch_size, 1)
+        meta_input = tf.constant(np.array(update_input_metadata).reshape(-1, 1), dtype=tf.string)
+
+        # Convert ratings to float32 input of shape (batch_size, 1)
+        rating_input = np.array(update_input_ratings).reshape(-1, 1).astype(np.float32)
+
+        target = self.model.predict([meta_input, rating_input], verbose=0)
+        target_meta_input = tf.constant(np.array(update_target_metadata).reshape(-1, 1), dtype=tf.string)
+        target_rating_input = np.array(update_target_ratings).reshape(-1, 1).astype(np.float32)
+
+        target_val = self.target_model.predict([target_meta_input, target_rating_input], verbose=0)
+        # target_val = self.target_model.predict([np.transpose(update_target_metadata),np.transpose(update_target_ratings)])
 
         for i in range(self.batch_size):
             # Q Learning: get maximum Q value at s' from target model
@@ -329,7 +389,7 @@ class DQNAgent:
                 target[i][action[i]] = reward[i] + self.discount_factor * ( np.amax(target_val[i]))
 
         # and do the model fit!
-        self.model.fit([np.transpose(update_input_metadata),np.transpose(update_input_ratings)], target, batch_size=self.batch_size,
+        self.model.fit([meta_input,rating_input], target, batch_size=self.batch_size,
                        epochs=1, verbose=1)
 
 state_size = len(env.states)
@@ -381,9 +441,10 @@ def run():
                 scores.append(score)
                 episodes.append(e)
                 pylab.plot(episodes, scores, 'b')
+                pylab.savefig("rewards.png")
                 print("episode:", e, "  score:", score, "  memory length:",
                     len(agent.memory), "  epsilon:", agent.epsilon)
-        if (score > 48): break
+        if (score > 100): break
 
 if __name__ == '__main__':
     run()

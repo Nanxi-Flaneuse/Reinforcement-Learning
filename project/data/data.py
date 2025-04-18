@@ -19,6 +19,18 @@ from sklearn.preprocessing import MultiLabelBinarizer
 
 # Load and sort the dataset
 df = pd.read_csv('ratings_updated_1.csv', index_col=0)
+
+# filter out illegal characters that the model can't process
+allowed_pattern = r"^[A-Za-z0-9.,!?;:'\"()\- ]+$"
+df = df[df['title'].astype(str).str.match(allowed_pattern)]
+
+# remove users whose age is less than 15 (age that is too young could be due to data input error)
+df = df[df['age'] >= 15]
+
+# replace gender strings of F and M with 0 and 1
+df['gender'] = df['gender'].str.strip().str.upper()
+df['gender'] = df['gender'].replace('F',0)
+df['gender'] = df['gender'].replace('M',1)
 df = df.sort_values(by=['user_id', 'timestamp'])
 
 # Count the number of interactions per user
@@ -33,5 +45,5 @@ df['is_train'] = df['rank'] < (0.8 * df['interaction_count'])
 # Split without loop
 train_df = df[df['is_train']].drop(columns=['interaction_count', 'rank', 'is_train']).reset_index(drop=True)
 test_df = df[~df['is_train']].drop(columns=['interaction_count', 'rank', 'is_train']).reset_index(drop=True)
-train_df.to_csv('train.csv',encoding='utf-8')
-test_df.to_csv('test.csv',encoding='utf-8')
+train_df.to_csv('training_testing/train.csv',encoding='utf-8')
+test_df.to_csv('training_testing/test.csv',encoding='utf-8')
