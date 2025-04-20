@@ -10,6 +10,7 @@ import random
 import pylab
 import os
 import gzip
+import matplotlib.pyplot as plt
 from urllib.request import urlopen
 from collections import deque
 from keras import layers, models
@@ -18,7 +19,9 @@ from keras.models import Sequential
 from keras.layers import Dense
 
 '''
-training error
+testing
+2. create another function in agent that bypasses episilon and give 5 predictions based on past metadata
+3. check if predictions are in testing data
 '''
 
 # # Load JSON data
@@ -37,6 +40,7 @@ training error
 # filtered_df = df[(df['verified'] == True) & (~df['overall'].isnull())]
 # print('hello')
 filtered_df = pd.read_csv('data/training_testing/train.csv')
+test_df = pd.read_csv('data/training_testing/test.csv')
 
 
 #Create FashionProduct class for a product representation from reviews
@@ -81,6 +85,17 @@ for user_id, group in grouped_df_reviwerId:
 # print(reviewers)
 print('user database established')
 
+reviewers_test = {}
+grouped_df_reviwerId_test = test_df.groupby('user_id')
+
+# creating test dataset
+for user_id, group in grouped_df_reviwerId_test:
+    movies = group['movie_id'].unique()
+
+    reviewer = Reviewer()
+    reviewer.user_id = user_id
+    reviewer.movies = movies
+    reviewers_test[user_id] = reviewer
 # # Filter dataset to include only reviewers with more than ten products
 # filtered_df = filtered_df[(filtered_df['user_id'].isin(list(reviewers.keys())))]
 # print(filtered_df.head())
@@ -205,6 +220,7 @@ class RecommendationEnv(gym.Env):
             #Higher reward as they are bought products for the user in future
             reward = 1
         else:
+            reward = -1
             self.action = actions[0]
     
         self.index += 1
@@ -340,6 +356,15 @@ class DQNAgent:
 
             return np.argpartition(q_value[0],-10)[-10:]
 
+    # get_action function for testing. The agent just needs to select the top 3 films it thinks that the user will like
+    def test_get_action(self, state):
+        q_value = self.model.predict(
+            [tf.constant([[state.metadata]]), np.array([[state.rating_avg]],dtype=np.float32)],
+            verbose=0
+        )
+
+        return np.argpartition(q_value[0],-5)[-5:]
+
     # save sample <s,a,r,s'> to the replay memory
     def append_sample(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
@@ -398,6 +423,17 @@ action_size = state_size
 agent = DQNAgent(state_size, action_size, env.states)
 
 def run():
+
+    def plot():
+            plt.figure(figsize=(8, 5))
+            plt.plot(scores)
+            plt.xlabel('Episode')
+            plt.ylabel('reward for each episode')
+            plt.title('rewards earned by model over time')
+            plt.grid(True)
+            file = 'rewards.jpg'
+            plt.savefig(file) 
+
     scores, episodes = [], []
     EPISODES = 25
     #cache already rewarded recommendations (optimization done based upon context and to improve the performance to a large extent)
@@ -440,11 +476,24 @@ def run():
 
                 scores.append(score)
                 episodes.append(e)
-                pylab.plot(episodes, scores, 'b')
-                pylab.savefig("rewards.png")
+                # pylab.plot(episodes, scores, 'b')
+                # pylab.savefig("rewards.png")
                 print("episode:", e, "  score:", score, "  memory length:",
                     len(agent.memory), "  epsilon:", agent.epsilon)
         if (score > 100): break
+    plot()
+    return agent
+
+def test():
+    accuracies = []
+    ag = run()
+
+    # get actions (recommendations)
+
+    # compare recommendations with test dataset - calculate accuracy for each user.
+
+    # return average accuracy for all users
+
 
 if __name__ == '__main__':
     run()
