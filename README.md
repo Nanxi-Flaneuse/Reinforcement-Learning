@@ -1,0 +1,1 @@
+The project folder in this repo contains an experimentation of building movie recommendation systems using two types of reinforcement learning algorithms: SlateQ and DoubleDQN. Click into the folder for more details.
